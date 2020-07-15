@@ -73,6 +73,12 @@ class Parcel {
       return 5;
     }
 
+    if (this.weight > 30) {
+      throw new Error(
+        `The parcel ${this.trackingId} is exceeding the maximum weight authorized (${this.weight} > 30kg)`,
+      );
+    }
+
     return 10;
   }
 }
