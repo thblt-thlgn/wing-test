@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import axios from 'axios';
 
 const ITEMS_FILE_PATH = join(__dirname, './data/items.json');
 const ORDERS_FILE_PATH = join(__dirname, './data/orders.json');
@@ -69,8 +70,14 @@ const getOrders = (items: Item[]): Order[] => {
   }));
 };
 
+const getTrackingCode = async (): Promise<string> => {
+  const res = await axios.post('https://helloacm.com/api/random/?n=15');
+  return res.data;
+};
+
 const items = getItems();
 const orders = getOrders(items);
 
 console.log('Items', items);
 console.log('Orders', orders);
+getTrackingCode().then(console.log);
