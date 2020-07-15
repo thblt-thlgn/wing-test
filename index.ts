@@ -55,6 +55,26 @@ class Parcel {
   get weight(): number {
     return this.items.reduce((acc, item) => acc + item.weight, 0);
   }
+
+  get cost(): number {
+    if (this.weight <= 1) {
+      return 1;
+    }
+
+    if (this.weight <= 5) {
+      return 2;
+    }
+
+    if (this.weight <= 10) {
+      return 3;
+    }
+
+    if (this.weight <= 20) {
+      return 5;
+    }
+
+    return 10;
+  }
 }
 
 const getItems = (): Item[] => {
@@ -105,11 +125,15 @@ const generateParcels = async (
   return Promise.all(promises);
 };
 
+const computeTotalAmount = (parcels: Parcel[]): number =>
+  parcels.reduce((acc, parcel) => acc + parcel.cost, 0);
+
 const main = async () => {
   const items = getItems();
   const orders = getOrders(items);
   const parcels = await generateParcels(orders);
-  console.log(parcels.map((cursor) => ({ ...cursor, weight: cursor.weight })));
+  const totalAmount = computeTotalAmount(parcels);
+  console.log(totalAmount);
 };
 
 main();
