@@ -39,6 +39,24 @@ interface Order {
   }[];
 }
 
+class Parcel {
+  constructor(public order: Order, public paletteId: number, public trackingId: string) {}
+
+  get items(): Item[] {
+    return this.order.items.reduce(
+      (acc, cursor) => [
+        ...acc,
+        ...Array.from(new Array(cursor.quantity)).map(() => cursor.item),
+      ],
+      new Array<Item>(),
+    );
+  }
+
+  get weight(): number {
+    return this.items.reduce((acc, item) => acc + item.weight, 0);
+  }
+}
+
 const getItems = (): Item[] => {
   const items = readFileSync(ITEMS_FILE_PATH);
   const dataItems = JSON.parse(items.toString()) as DataItems;
@@ -62,7 +80,6 @@ const getOrders = (items: Item[]): Order[] => {
   return dataOrders.orders.map((cursor) => ({
     id: cursor.id,
     date: new Date(cursor.date),
-    // items: [],
     items: cursor.items.map(({ item_id, quantity }) => ({
       item: findItemById(item_id, items),
       quantity: parseInt(quantity, 10),
@@ -75,9 +92,24 @@ const getTrackingCode = async (): Promise<string> => {
   return res.data;
 };
 
-const items = getItems();
-const orders = getOrders(items);
+const generateParcels = async (
+  orders: Order[],
+  maxParcelPerPalette = 15,
+): Promise<Parcel[]> => {
+  const promises = orders.map(async (order, position) => {
+    const trackingId = await getTrackingCode();
+    const paletteId = Math.floor(position / maxParcelPerPalette) + 1;
+    return new Parcel(order, paletteId, trackingId);
+  });
 
-console.log('Items', items);
-console.log('Orders', orders);
-getTrackingCode().then(console.log);
+  return Promise.all(promises);
+};
+
+const main = async () => {
+  const items = getItems();
+  const orders = getOrders(items);
+  const parcels = await generateParcels(orders);
+  console.log(parcels.map((cursor) => ({ ...cursor, weight: cursor.weight })));
+};
+
+main();
