@@ -6,6 +6,9 @@
   "author": "Thibault Théologien <thibault.theologien@hotmail.fr>",
   "license": "UNLICENSED",
   "private": false,
+  "scripts": {
+    "start": "ts-node index.ts"
+  },
   "dependencies": {
     "typescript": "^3.9.6"
   },
