@@ -40,16 +40,12 @@ interface Order {
 }
 
 class Parcel {
+  #items: Item[] = [];
+
   constructor(public order: Order, public paletteId: number, public trackingId: string) {}
 
   get items(): Item[] {
-    return this.order.items.reduce(
-      (acc, cursor) => [
-        ...acc,
-        ...Array.from(new Array(cursor.quantity)).map(() => cursor.item),
-      ],
-      new Array<Item>(),
-    );
+    return this.#items;
   }
 
   get weight(): number {
@@ -73,7 +69,7 @@ class Parcel {
       return 5;
     }
 
-    if (this.weight > 30) {
+    if (this.isOverWeighted) {
       throw new Error(
         `The parcel ${this.trackingId} is exceeding the maximum weight authorized (${this.weight} > 30kg)`,
       );
@@ -81,7 +77,23 @@ class Parcel {
 
     return 10;
   }
+
+  get isOverWeighted(): boolean {
+    return isOverWeighted(this.weight);
+  }
+
+  addItem(item: Item): boolean {
+    if (isOverWeighted(this.weight + item.weight)) {
+      return false;
+    }
+
+    this.#items.push(item);
+    console.log(this.trackingId, this.weight);
+    return true;
+  }
 }
+
+const isOverWeighted = (weight: number) => weight > 30;
 
 const getItems = (): Item[] => {
   const items = readFileSync(ITEMS_FILE_PATH);
@@ -118,18 +130,44 @@ const getTrackingCode = async (): Promise<string> => {
   return res.data;
 };
 
+const generateParcelItems = (order: Order): Item[] =>
+  order.items.reduce(
+    (acc, cursor) => [
+      ...acc,
+      ...Array.from(new Array(cursor.quantity)).map(() => cursor.item),
+    ],
+    new Array<Item>(),
+  );
+
 const generateParcels = async (
   orders: Order[],
   maxParcelPerPalette = 15,
-): Promise<Parcel[]> => {
-  const promises = orders.map(async (order, position) => {
-    const trackingId = await getTrackingCode();
-    const paletteId = Math.floor(position / maxParcelPerPalette) + 1;
-    return new Parcel(order, paletteId, trackingId);
-  });
+): Promise<Parcel[]> =>
+  orders.reduce(async (acc, order, position) => {
+    const list = await acc;
+    const items = generateParcelItems(order);
+    let parcel = new Parcel(
+      order,
+      Math.floor(position / maxParcelPerPalette) + 1,
+      await getTrackingCode(),
+    );
+    const parcels = [parcel];
 
-  return Promise.all(promises);
-};
+    for (const item of items) {
+      if (isOverWeighted(parcel.weight + item.weight)) {
+        parcel = new Parcel(
+          order,
+          Math.floor(position / maxParcelPerPalette) + 1,
+          await getTrackingCode(),
+        );
+        parcels.push(parcel);
+      }
+
+      parcel.addItem(item);
+    }
+
+    return [...list, ...parcels];
+  }, Promise.resolve(new Array<Parcel>()));
 
 const computeTotalAmount = (parcels: Parcel[]): number =>
   parcels.reduce((acc, parcel) => acc + parcel.cost, 0);
