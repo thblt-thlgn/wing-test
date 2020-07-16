@@ -21,8 +21,7 @@
     "forceConsistentCasingInFileNames": true,
     "removeComments": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationDir": "types"
+    "declaration": true
   },
   "include": ["src/**/*"]
 }

@@ -50,6 +50,5 @@ coverage
 # GENERATED
 # ------------------
 dist
-types
-__threads
 .history
+data/parcels.json
