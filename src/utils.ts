@@ -143,11 +143,12 @@ export const generateParcels = async (
   orders: Order[],
   maxParcelPerPalette = MAX_PARCEL_PER_PALETTE,
 ): Promise<Parcel[]> => {
-  const parcels = orders.reduce(async (acc, order, position) => {
+  let parcelPosition = 0;
+  const parcels = orders.reduce(async (acc, order) => {
     const itemGroup = splitOrderOverParcels(order);
     const parcels = new Array<Parcel>();
     for (const items of itemGroup) {
-      const paletteId = Math.floor(position / maxParcelPerPalette) + 1;
+      const paletteId = Math.floor(parcelPosition++ / maxParcelPerPalette) + 1;
       const trackingCode = await getTrackingCode();
       parcels.push(new Parcel(order, paletteId, trackingCode, items));
     }
