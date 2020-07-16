@@ -4,6 +4,7 @@ import axios from 'axios';
 
 const ITEMS_FILE_PATH = join(__dirname, './data/items.json');
 const ORDERS_FILE_PATH = join(__dirname, './data/orders.json');
+const PARCEL_MAX_WEIGHT = 30;
 
 interface DataItems {
   items: {
@@ -40,16 +41,15 @@ interface Order {
 }
 
 class Parcel {
-  #items: Item[] = [];
-
-  constructor(public order: Order, public paletteId: number, public trackingId: string) {}
-
-  get items(): Item[] {
-    return this.#items;
-  }
+  constructor(
+    public order: Order,
+    public paletteId: number,
+    public trackingId: string,
+    public items: Item[],
+  ) {}
 
   get weight(): number {
-    return this.items.reduce((acc, item) => acc + item.weight, 0);
+    return getItemGroupWeight(this.items);
   }
 
   get cost(): number {
@@ -71,7 +71,7 @@ class Parcel {
 
     if (this.isOverWeighted) {
       throw new Error(
-        `The parcel ${this.trackingId} is exceeding the maximum weight authorized (${this.weight} > 30kg)`,
+        `The parcel ${this.trackingId} is exceeding the maximum weight authorized (${this.weight} > ${PARCEL_MAX_WEIGHT}kg)`,
       );
     }
 
@@ -81,19 +81,9 @@ class Parcel {
   get isOverWeighted(): boolean {
     return isOverWeighted(this.weight);
   }
-
-  addItem(item: Item): boolean {
-    if (isOverWeighted(this.weight + item.weight)) {
-      return false;
-    }
-
-    this.#items.push(item);
-    console.log(this.trackingId, this.weight);
-    return true;
-  }
 }
 
-const isOverWeighted = (weight: number) => weight > 30;
+const isOverWeighted = (weight: number) => weight > PARCEL_MAX_WEIGHT;
 
 const getItems = (): Item[] => {
   const items = readFileSync(ITEMS_FILE_PATH);
@@ -139,34 +129,43 @@ const generateParcelItems = (order: Order): Item[] =>
     new Array<Item>(),
   );
 
+const getItemGroupWeight = (items: Item[]) =>
+  items.reduce((acc, item) => acc + item.weight, 0);
+
+const splitOrderOverParcels = (order: Order): Item[][] => {
+  let items = generateParcelItems(order).sort((a, b) => b.weight - a.weight);
+  const itemGroup = new Array<Item[]>([]);
+
+  while (items.length > 0) {
+    const group = itemGroup[itemGroup.length - 1];
+    const weight = getItemGroupWeight(group);
+    const index = items.findIndex(
+      (cursor) => cursor.weight + weight <= PARCEL_MAX_WEIGHT,
+    );
+    if (index !== -1) {
+      group.push(items[index]);
+      items = [...items.slice(0, index), ...items.slice(index + 1, items.length)];
+    } else {
+      itemGroup.push([items.shift() as Item]);
+    }
+  }
+
+  return itemGroup;
+};
+
 const generateParcels = async (
   orders: Order[],
   maxParcelPerPalette = 15,
 ): Promise<Parcel[]> =>
   orders.reduce(async (acc, order, position) => {
-    const list = await acc;
-    const items = generateParcelItems(order);
-    let parcel = new Parcel(
-      order,
-      Math.floor(position / maxParcelPerPalette) + 1,
-      await getTrackingCode(),
-    );
-    const parcels = [parcel];
-
-    for (const item of items) {
-      if (isOverWeighted(parcel.weight + item.weight)) {
-        parcel = new Parcel(
-          order,
-          Math.floor(position / maxParcelPerPalette) + 1,
-          await getTrackingCode(),
-        );
-        parcels.push(parcel);
-      }
-
-      parcel.addItem(item);
+    const itemGroup = splitOrderOverParcels(order);
+    const parcels = new Array<Parcel>();
+    for (const items of itemGroup) {
+      const paletteId = Math.floor(position / maxParcelPerPalette) + 1;
+      const trackingCode = await getTrackingCode();
+      parcels.push(new Parcel(order, paletteId, trackingCode, items));
     }
-
-    return [...list, ...parcels];
+    return [...(await acc), ...parcels];
   }, Promise.resolve(new Array<Parcel>()));
 
 const computeTotalAmount = (parcels: Parcel[]): number =>
@@ -177,7 +176,13 @@ const main = async () => {
   const orders = getOrders(items);
   const parcels = await generateParcels(orders);
   const totalAmount = computeTotalAmount(parcels);
-  console.log(totalAmount);
+
+  // console.log(
+  //   totalAmount,
+  //   orders.length,
+  //   parcels.length,
+  //   parcels.map((parcel) => parcel.weight),
+  // );
 };
 
 main();
